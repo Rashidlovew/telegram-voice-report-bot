@@ -1,0 +1,6 @@
+flask
+python-telegram-bot==13.15
+openai
+docxtpl
+pydub
+ffmpeg-python
