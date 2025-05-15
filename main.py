@@ -118,4 +118,6 @@ def set_webhook():
         return f"Webhook set to: {webhook_url}"
     else:
         return "Webhook not set. RENDER_EXTERNAL_URL not found."
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)
 
