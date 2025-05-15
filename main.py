@@ -111,4 +111,11 @@ def webhook():
 # === Set webhook from browser ===
 @app.route("/set_webhook", methods=["GET"])
 def set_webhook():
-    public_url = os.environ.get("RENDER_EXTERNAL_URL") or "https://your-manual_
+    public_url = os.environ.get("RENDER_EXTERNAL_URL")
+    if public_url:
+        webhook_url = f"{public_url}/{TELEGRAM_TOKEN}"
+        bot.set_webhook(webhook_url)
+        return f"Webhook set to: {webhook_url}"
+    else:
+        return "Webhook not set. RENDER_EXTERNAL_URL not found."
+
