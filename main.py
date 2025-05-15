@@ -15,18 +15,24 @@ EMAIL_SENDER = os.environ["EMAIL_SENDER"]
 EMAIL_PASSWORD = os.environ["EMAIL_PASSWORD"]
 EMAIL_RECEIVER = os.environ["EMAIL_RECEIVER"]
 
-openai.api_key = OPENAI_KEY
+# ✅ New OpenAI client
+client = openai.OpenAI(api_key=OPENAI_KEY)
+
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
 app = Flask(__name__)
 dispatcher = Dispatcher(bot, update_queue=None, workers=0, use_context=True)
 
-# === Transcribe voice to text ===
+# === Transcribe voice to text (updated version) ===
 def transcribe(file_path):
     audio = AudioSegment.from_file(file_path)
     audio.export("converted.wav", format="wav")
     with open("converted.wav", "rb") as audio_file:
-        result = openai.Audio.transcribe("whisper-1", audio_file, language="ar")
-        return result["text"]
+        transcription = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_file,
+            language="ar"
+        )
+        return transcription.text
 
 # === Extract fields from Arabic input ===
 def extract_fields(text):
@@ -118,6 +124,6 @@ def set_webhook():
         return f"Webhook set to: {webhook_url}"
     else:
         return "Webhook not set. RENDER_EXTERNAL_URL not found."
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
-
