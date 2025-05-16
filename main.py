@@ -47,7 +47,7 @@ def transcribe(file_path):
 
 # === Enhance input text with GPT-4 ===
 def enhance_with_gpt(field_name, user_input):
-    prompt = f"أعد صياغة {field_name} التالية بطريقة احترافية، باستخدام أسلوب مهني وفصيح. صيغة التاريخ يجب أن تكون بالأرقام:\n\n{user_input}"
+    prompt = f"أعد صياغة {field_name} التالية بطريقة احترافية، مع استخدام أسلوب عربي فصيح و مهني. يرجى الانتباه إلى جعل التاريخ بصيغة أرقام:\n\n{user_input}"
     response = client.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}]
@@ -77,6 +77,24 @@ def send_email():
         smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
         smtp.send_message(msg)
 
+# === /start command ===
+def start_command(update, context):
+    user_id = update.message.from_user.id
+    user_state[user_id] = {"step": 0, "data": {}}
+    message = (
+        "👋 مرحباً بك في بوت إعداد تقارير التحقيق.\n"
+        "📌 أرسل الأوامر الصوتية واحداً تلو الآخر حسب التعليمات.\n"
+        "🔄 في حال الخطأ يمكنك استخدام /startover لإعادة البدء من جديد.\n\n"
+        + field_prompts["Date"]
+    )
+    update.message.reply_text(message)
+
+# === /startover command ===
+def startover_command(update, context):
+    user_id = update.message.from_user.id
+    user_state[user_id] = {"step": 0, "data": {}}
+    update.message.reply_text("🔄 تم إعادة البدء.\n" + field_prompts["Date"])
+
 # === Voice Handler ===
 def handle_voice(update, context):
     user_id = update.message.from_user.id
@@ -105,30 +123,28 @@ def handle_voice(update, context):
         update.message.reply_text("📄 تم إنشاء التقرير وإرساله إلى بريدك الإلكتروني.")
         del user_state[user_id]
 
-# === /start command ===
-def start_command(update, context):
+# === Text handler for fallback start ===
+def handle_text(update, context):
     user_id = update.message.from_user.id
-    user_state.pop(user_id, None)
-    message = (
-        "👋 مرحباً بك في بوت إعداد تقارير التحقيق.\n"
-        "📌 أرسل الأوامر الصوتية واحداً تلو الآخر حسب التعليمات.\n"
-        "🔄 في حال الخطأ يمكنك استخدام /startover لإعادة البدء من جديد.\n\n"
-        + field_prompts["Date"]
-    )
-    user_state[user_id] = {"step": 0, "data": {}}
-    update.message.reply_text(message)
+    if user_id not in user_state:
+        user_state[user_id] = {"step": 0, "data": {}}
+        message = (
+            "👋 مرحباً بك في بوت إعداد تقارير التحقيق.\n"
+            "📌 أرسل الأوامر الصوتية واحداً تلو الآخر حسب التعليمات.\n"
+            "🔄 في حال الخطأ يمكنك استخدام /startover لإعادة البدء من جديد.\n\n"
+            + field_prompts["Date"]
+        )
+        update.message.reply_text(message)
+    else:
+        update.message.reply_text("🎤 الرجاء إرسال الملاحظة الصوتية التالية حسب الترتيب.")
 
-# === /startover command ===
-def startover_command(update, context):
-    user_id = update.message.from_user.id
-    user_state[user_id] = {"step": 0, "data": {}}
-    update.message.reply_text("♻️ تم إعادة البدء. " + field_prompts["Date"])
-
-# === Telegram setup ===
+# === Telegram handlers setup ===
 dispatcher.add_handler(CommandHandler("start", start_command))
 dispatcher.add_handler(CommandHandler("startover", startover_command))
 dispatcher.add_handler(MessageHandler(Filters.voice, handle_voice))
+dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
 
+# === Webhook endpoints ===
 @app.route(f"/{TELEGRAM_TOKEN}", methods=["POST"])
 def webhook():
     update = telegram.Update.de_json(request.get_json(force=True), bot)
