@@ -30,10 +30,10 @@ field_prompts = {
     "Date": "🎙️ أرسل تاريخ الواقعة.",
     "Briefing": "🎙️ أرسل ملخص الحادث.",
     "Observations": "🎙️ أرسل الملاحظات.",
-    "Investigator": "🎙️ أرسل اسم المحقق.",
+    "Investigator": "🎙️ أرسل اسم الفاحص.",
     "LocationObservations": "🎙️ أرسل معاينة الموقع.",
     "Examination": "🎙️ أرسل نتيجة الفحص الفني.",
-    "Outcomes": "🎙️ أرسل النتيجة النهائية.",
+    "Outcomes": "🎙️ أرسل النتيجة.",
     "TechincalOpinion": "🎙️ أرسل الرأي الفني."
 }
 
@@ -44,6 +44,15 @@ def transcribe(file_path):
     with open("converted.wav", "rb") as f:
         result = client.audio.transcriptions.create(model="whisper-1", file=f, language="ar")
     return result.text
+
+# === Enhance input text with GPT-4 ===
+def enhance_with_gpt(field_name, user_input):
+    prompt = f"أعد صياغة {field_name} التالية بطريقة احترافية وبصيغة تقرير رسمي، مع استخدام أسلوب عربي فصيح واستطراد:\n\n{user_input}"
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return response.choices[0].message.content.strip()
 
 # === Report generation ===
 def generate_report(data):
@@ -82,7 +91,8 @@ def handle_voice(update, context):
 
     step = user_state[user_id]["step"]
     field = expected_fields[step]
-    user_state[user_id]["data"][field] = text
+    enhanced = enhance_with_gpt(field, text)
+    user_state[user_id]["data"][field] = enhanced
 
     step += 1
     if step < len(expected_fields):
