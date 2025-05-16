@@ -1,5 +1,3 @@
-# main.py (updated for interactive voice prompts)
-
 import os
 import openai
 import telegram
@@ -10,46 +8,46 @@ from pydub import AudioSegment
 import smtplib
 from email.message import EmailMessage
 
+# === Config ===
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 OPENAI_KEY = os.environ["OPENAI_KEY"]
 EMAIL_SENDER = os.environ["EMAIL_SENDER"]
 EMAIL_PASSWORD = os.environ["EMAIL_PASSWORD"]
 EMAIL_RECEIVER = os.environ["EMAIL_RECEIVER"]
-RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL")
 
 openai.api_key = OPENAI_KEY
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
 app = Flask(__name__)
-dispatcher = Dispatcher(bot, update_queue=None, workers=0, use_context=True)
+dispatcher = Dispatcher(bot, update_queue=None, workers=1, use_context=True)
 
-# Session storage
-user_sessions = {}
-
-# Field prompts and keys
-fields = [
-    ("Date", "🎙️ أرسل الآن التاريخ"),
-    ("Briefing", "🎙️ أرسل الآن الحادث"),
-    ("Observations", "🎙️ أرسل الآن الملاحظات"),
-    ("Investigator", "🎙️ أرسل الآن اسم المحقق"),
-    ("LocationObservations", "🎙️ أرسل الآن معاينة الموقع"),
-    ("Examination", "🎙️ أرسل الآن الفحص الفني"),
-    ("Outcomes", "🎙️ أرسل الآن النتيجة"),
-    ("TechincalOpinion", "🎙️ أرسل الآن الرأي الفني")
-]
-
-# Transcription
+# === Transcribe voice to text ===
 def transcribe(file_path):
     audio = AudioSegment.from_file(file_path)
     audio.export("converted.wav", format="wav")
-    with open("converted.wav", "rb") as f:
-        transcription = openai.audio.transcriptions.create(
+    with open("converted.wav", "rb") as audio_file:
+        client = openai.OpenAI()
+        transcription = client.audio.transcriptions.create(
             model="whisper-1",
-            file=f,
+            file=audio_file,
             language="ar"
         )
-    return transcription.text
+        return transcription.text
 
-# Generate report
+# === Extract fields from Arabic input ===
+def extract_fields(text):
+    lines = text.split("،")
+    return {
+        "Date": lines[0].replace("التاريخ", "").strip(),
+        "Briefing": lines[1].replace("الحادث", "").strip(),
+        "Observations": lines[2].replace("الملاحظات", "").strip(),
+        "Investigator": lines[3].replace("المحقق", "").strip(),
+        "LocationObservations": lines[4].replace("معاينةالموقع", "").strip(),
+        "Examination": lines[5].replace("الفحص_الفني", "").strip(),
+        "Outcomes": lines[6].replace("النتيحة", "").strip(),
+        "TechincalOpinion": lines[7].replace("الرأي_الفني", "").strip(),
+    }
+
+# === Generate report using GPT-4 ===
 def generate_report(data):
     prompt = f"""اكتب تقرير تحقيق رسمي باللغة العربية بناءً على:
     التاريخ: {data['Date']}
@@ -62,16 +60,16 @@ def generate_report(data):
     الرأي_الفني: {data['TechincalOpinion']}
     بصيغة رسمية ومهنية مع أستطراد في الكلام."""
 
-    response = openai.chat.completions.create(
+    response = openai.ChatCompletion.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}]
     )
-    data["FullReport"] = response.choices[0].message.content
+    data["FullReport"] = response["choices"][0]["message"]["content"]
     template = DocxTemplate("police_report_template.docx")
     template.render(data)
     template.save("تقرير_التحقيق.docx")
 
-# Send report
+# === Send the Word report via email ===
 def send_email():
     msg = EmailMessage()
     msg['Subject'] = "تقرير تحقيق تلقائي"
@@ -91,64 +89,49 @@ def send_email():
         smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
         smtp.send_message(msg)
 
-# Voice handler
-
+# === Telegram voice handler ===
 def handle_voice(update, context):
-    user_id = update.effective_user.id
-    file = update.message.voice.get_file()
-    file.download("voice.ogg")
-    text = transcribe("voice.ogg")
+    try:
+        update.message.reply_text("📥 جارٍ تحميل المقطع الصوتي...")
+        file = update.message.voice.get_file()
+        file.download("voice.ogg")
 
-    # New session
-    if user_id not in user_sessions:
-        update.message.reply_text("أرسل 'ابدأ التقرير' أولاً.")
-        return
+        update.message.reply_text("🎙️ جارٍ تحويل الصوت إلى نص...")
+        text = transcribe("voice.ogg")
+        update.message.reply_text(f"📋 تم تحويل الصوت إلى نص:\n{text}")
 
-    session = user_sessions[user_id]
-    step = session["step"]
-    field_key, _ = fields[step]
-    session["data"][field_key] = text
-    session["step"] += 1
+        update.message.reply_text("📄 جارٍ إنشاء التقرير...")
+        data = extract_fields(text)
+        generate_report(data)
 
-    if session["step"] < len(fields):
-        next_prompt = fields[session["step"]][1]
-        update.message.reply_text(next_prompt)
-    else:
-        generate_report(session["data"])
+        update.message.reply_text("📬 جارٍ إرسال التقرير إلى بريدك الإلكتروني...")
         send_email()
-        update.message.reply_text("📄 تم إرسال التقرير إلى بريدك الإلكتروني.")
-        del user_sessions[user_id]
 
-# Start command
+        update.message.reply_text("✅ تم إرسال التقرير إلى بريدك الإلكتروني.")
+    except Exception as e:
+        update.message.reply_text(f"❌ حدث خطأ: {e}")
 
-def handle_text(update, context):
-    user_id = update.effective_user.id
-    if update.message.text.strip() == "ابدأ التقرير":
-        user_sessions[user_id] = {"step": 0, "data": {}}
-        update.message.reply_text(fields[0][1])
-    else:
-        update.message.reply_text("أرسل 'ابدأ التقرير' لبدء إنشاء تقرير جديد.")
-
-# Telegram hooks
 voice_handler = MessageHandler(Filters.voice, handle_voice)
-text_handler = MessageHandler(Filters.text & (~Filters.command), handle_text)
 dispatcher.add_handler(voice_handler)
-dispatcher.add_handler(text_handler)
 
-# Webhook route
+# === Webhook endpoint ===
 @app.route(f"/{TELEGRAM_TOKEN}", methods=["POST"])
 def webhook():
     update = telegram.Update.de_json(request.get_json(force=True), bot)
     dispatcher.process_update(update)
     return "OK"
 
+# === Set webhook from browser ===
 @app.route("/set_webhook", methods=["GET"])
 def set_webhook():
-    if RENDER_EXTERNAL_URL:
-        bot.set_webhook(f"{RENDER_EXTERNAL_URL}/{TELEGRAM_TOKEN}")
-        return f"Webhook set to: {RENDER_EXTERNAL_URL}/{TELEGRAM_TOKEN}"
+    public_url = os.environ.get("RENDER_EXTERNAL_URL")
+    if public_url:
+        webhook_url = f"{public_url}/{TELEGRAM_TOKEN}"
+        bot.set_webhook(webhook_url)
+        return f"Webhook set to: {webhook_url}"
     else:
-        return "Missing RENDER_EXTERNAL_URL"
+        return "Webhook not set. RENDER_EXTERNAL_URL not found."
 
+# === Run App ===
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
