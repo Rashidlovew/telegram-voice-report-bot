@@ -47,7 +47,7 @@ def transcribe(file_path):
 
 # === Enhance input text with GPT-4 ===
 def enhance_with_gpt(field_name, user_input):
-    prompt = f"أعد صياغة {field_name} التالية بطريقة احترافية وبصيغة تقرير رسمي، مع استخدام أسلوب عربي فصيح واستطراد:\n\n{user_input}"
+    prompt = f"أعد صياغة {field_name}       التالية بطريقة احترافية ، مع استخدام أسلوب عربي فصيح و مهني يرجى الانتباه الى جعل التاريخ بصيغة ارقام  :\n\n{user_input}"
     response = client.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}]
