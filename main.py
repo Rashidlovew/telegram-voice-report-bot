@@ -18,14 +18,27 @@ TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 OPENAI_KEY = os.environ["OPENAI_KEY"]
 EMAIL_SENDER = os.environ["EMAIL_SENDER"]
 EMAIL_PASSWORD = os.environ["EMAIL_PASSWORD"]
-EMAIL_RECEIVER = os.environ["EMAIL_RECEIVER"]
 
 client = OpenAI(api_key=OPENAI_KEY)
 bot = telegram.Bot(token=TELEGRAM_TOKEN)
 app = Flask(__name__)
 dispatcher = Dispatcher(bot, update_queue=None, workers=0, use_context=True)
 
-# === User state ===
+# === Investigator options with their emails ===
+investigator_emails = {
+    "المقدم محمد علي القاسم": "mohammed@example.com",
+    "النقيب عبدالله راشد ال علي": "abdullah@example.com",
+    "النقيب سليمان محمد الزرعوني": "sulaiman@example.com",
+    "الملازم أول أحمد خالد الشامسي": "ahmed@example.com",
+    "العريف راشد محمد بن حسين": "rashed@example.com",
+    "المدني محمد ماهر العلي": "maher@example.com",
+    "المدني امنه خالد المازمي": "amna@example.com",
+    "المدني حمده ماجد ال علي": "hamda@example.com",
+    "المدني عمر محسن الزقري": "omar@example.com"
+}
+investigator_names = list(investigator_emails.keys())
+
+# === Bot state ===
 user_state = {}
 expected_fields = [
     "Date", "Briefing", "Observations", "LocationObservations",
@@ -40,13 +53,8 @@ field_prompts = {
     "Outcomes": "🎙️ أرسل النتيجة.",
     "TechincalOpinion": "🎙️ أرسل الرأي الفني."
 }
-investigator_names = [
-    "المقدم محمد علي القاسم", "النقيب عبدالله راشد ال علي", "النقيب سليمان محمد الزرعوني",
-    "الملازم أول أحمد خالد الشامسي", "العريف راشد محمد بن حسين", "المدني محمد ماهر العلي",
-    "المدني امنه خالد المازمي", "المدني حمده ماجد ال علي", "المدني عمر محسن الزقري"
-]
 
-# === Transcribe voice to text ===
+# === Utilities ===
 def transcribe(file_path):
     audio = AudioSegment.from_file(file_path)
     audio.export("converted.wav", format="wav")
@@ -54,11 +62,10 @@ def transcribe(file_path):
         result = client.audio.transcriptions.create(model="whisper-1", file=f, language="ar")
     return result.text
 
-# === Enhance input with GPT ===
 def enhance_with_gpt(field_name, user_input):
     prompt = (
-        f"يرجى إعادة صياغة التالي ({field_name}) باستخدام أسلوب مهني وعربي فصيح  ، "
-        f"مع تجنب المشاعر و العواطف، وصياغة التاريخ بالشكل التالي: 20/مايو/2025:\n\n{user_input}"
+        f"يرجى إعادة صياغة التالي ({field_name}) باستخدام أسلوب مهني وعربي فصيح، "
+        f"مع تجنب المشاعر وصياغة التاريخ بهذا الشكل 20/مايو/2025:\n\n{user_input}"
     )
     response = client.chat.completions.create(
         model="gpt-4",
@@ -66,7 +73,6 @@ def enhance_with_gpt(field_name, user_input):
     )
     return response.choices[0].message.content.strip()
 
-# === Format and generate report ===
 def format_report_doc(path):
     doc = Document(path)
     for paragraph in doc.paragraphs:
@@ -86,12 +92,11 @@ def generate_report(data):
     format_report_doc(filename)
     return filename
 
-# === Email report ===
-def send_email(file_path):
+def send_email(file_path, recipient):
     msg = EmailMessage()
     msg["Subject"] = "تقرير تحقيق تلقائي"
     msg["From"] = EMAIL_SENDER
-    msg["To"] = EMAIL_RECEIVER
+    msg["To"] = recipient
     msg.set_content("📎 يرجى مراجعة التقرير المرفق.")
     with open(file_path, "rb") as f:
         msg.add_attachment(
@@ -104,7 +109,7 @@ def send_email(file_path):
         smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
         smtp.send_message(msg)
 
-# === Handlers ===
+# === Bot Handlers ===
 def start(update, context):
     user_id = update.message.from_user.id
     user_state[user_id] = {"step": 0, "data": {}}
@@ -160,9 +165,11 @@ def handle_voice(update, context):
         next_field = expected_fields[step]
         update.message.reply_text(f"✅ تم تسجيل {field}.\n{field_prompts[next_field]}")
     else:
+        investigator = user_state[user_id]["data"]["Investigator"]
+        recipient_email = investigator_emails.get(investigator, EMAIL_SENDER)
         file_path = generate_report(user_state[user_id]["data"])
-        send_email(file_path)
-        update.message.reply_text("📄 تم إنشاء التقرير وإرساله إلى البريد الإلكتروني.")
+        send_email(file_path, recipient_email)
+        update.message.reply_text("📄 تم إنشاء التقرير وإرساله إلى البريد الإلكتروني المحدد.")
         del user_state[user_id]
 
 def startover(update, context):
@@ -184,17 +191,14 @@ def repeat(update, context):
 
 def step_back(update, context):
     user_id = update.message.from_user.id
-    if user_id in user_state:
-        if user_state[user_id]["step"] > 1:
-            user_state[user_id]["step"] -= 1
-            field = expected_fields[user_state[user_id]["step"] - 1]
-            update.message.reply_text(f"⬅️ عدنا إلى {field}.\n{field_prompts[field]}")
-        else:
-            update.message.reply_text("❗ لا يمكن الرجوع أكثر من ذلك.")
+    if user_id in user_state and user_state[user_id]["step"] > 1:
+        user_state[user_id]["step"] -= 1
+        field = expected_fields[user_state[user_id]["step"] - 1]
+        update.message.reply_text(f"⬅️ عدنا إلى {field}.\n{field_prompts[field]}")
     else:
-        update.message.reply_text("❗ لم تبدأ بعد. أرسل /start للبدء.")
+        update.message.reply_text("❗ لا يمكن الرجوع أكثر من ذلك.")
 
-# === Telegram setup ===
+# === Dispatcher setup ===
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CommandHandler("startover", startover))
 dispatcher.add_handler(CommandHandler("repeat", repeat))
