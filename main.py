@@ -57,7 +57,7 @@ def transcribe(file_path):
 # === Enhance input with GPT ===
 def enhance_with_gpt(field_name, user_input):
     prompt = (
-        f"يرجى إعادة صياغة التالي ({field_name}) باستخدام أسلوب مهني وعربي فصيح مع استطراد، "
+        f"يرجى إعادة صياغة التالي ({field_name}) باستخدام أسلوب مهني وعربي فصيح  ، "
         f"مع تجنب المشاعر و العواطف، وصياغة التاريخ بالشكل التالي: 20/مايو/2025:\n\n{user_input}"
     )
     response = client.chat.completions.create(
