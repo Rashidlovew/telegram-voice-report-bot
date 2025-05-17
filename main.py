@@ -1,6 +1,6 @@
 import os
 import telegram
-from telegram.ext import Dispatcher, MessageHandler, Filters, CommandHandler, MessageHandler
+from telegram.ext import Dispatcher, MessageHandler, Filters, CommandHandler
 from flask import Flask, request
 from docxtpl import DocxTemplate
 from pydub import AudioSegment
@@ -36,6 +36,12 @@ field_prompts = {
     "Outcomes": "🎙️ أرسل النتيجة.",
     "TechincalOpinion": "🎙️ أرسل الرأي الفني."
 }
+welcome_message = (
+    "👋 مرحباً بك في بوت إعداد تقاريرالفحص الخاص بقسم الهندسة الجنائية.\n"
+    "📌 أرسل ملاحظة صوتية عند كل طلب.\n"
+    "🔄 لإعادة البدء من جديد أرسل /startover\n"
+    "↩️ لإعادة إدخال الخطوة الحالية أرسل /repeat\n"
+)
 
 # === Transcription ===
 def transcribe(file_path):
@@ -45,16 +51,16 @@ def transcribe(file_path):
         result = client.audio.transcriptions.create(model="whisper-1", file=f, language="ar")
     return result.text
 
-# === Enhance input with GPT ===
+# === Enhance input text with GPT-4 ===
 def enhance_with_gpt(field_name, user_input):
-    prompt = f"أعد صياغة {field_name} التالية بطريقة احترافية، بأسلوب عربي فصيح ومهني. احرص على جعل التاريخ بصيغة أرقام إن وُجد:\n\n{user_input}"
+    prompt = f"أعد صياغة {field_name} التالية بطريقة احترافية ، مع استخدام أسلوب عربي فصيح و مهني، وكتابة التاريخ بالأرقام:\n\n{user_input}"
     response = client.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}]
     )
     return response.choices[0].message.content.strip()
 
-# === Generate report ===
+# === Report generation ===
 def generate_report(data):
     doc = DocxTemplate("police_report_template.docx")
     doc.render(data)
@@ -86,7 +92,8 @@ def handle_voice(update, context):
 
     if user_id not in user_state:
         user_state[user_id] = {"step": 0, "data": {}}
-        update.message.reply_text("✅ تم البدء. " + field_prompts[expected_fields[0]])
+        field = expected_fields[0]
+        update.message.reply_text(welcome_message + "\n" + field_prompts[field])
         return
 
     step = user_state[user_id]["step"]
@@ -105,49 +112,36 @@ def handle_voice(update, context):
         update.message.reply_text("📄 تم إنشاء التقرير وإرساله إلى بريدك الإلكتروني.")
         del user_state[user_id]
 
-# === Command: /start ===
-def start(update, context):
-    update.message.reply_text(
-        "👋 مرحباً بك في بوت إعداد تقاريرالفحص الخاص بقسم الهندسة الجنائية.\n"
-        "📌 أرسل ملاحظة صوتية عند كل طلب.\n"
-        "🔄 لإعادة البدء من جديد أرسل /startover\n"
-        "↩️ لإعادة إدخال الخطوة الحالية أرسل /repeat\n"
-        "✅ للبدء، أرسل أي رسالة أو ملاحظة صوتية."
-    )
-
-# === Command: /startover ===
-def startover(update, context):
-    user_id = update.message.from_user.id
-    user_state[user_id] = {"step": 0, "data": {}}
-    update.message.reply_text("🔄 تم إعادة البدء.\n" + field_prompts[expected_fields[0]])
-
-# === Command: /repeat ===
-def repeat_step(update, context):
-    user_id = update.message.from_user.id
-    if user_id in user_state:
-        step = user_state[user_id]["step"]
-        current_field = expected_fields[step]
-        update.message.reply_text(f"🔁 أعد إرسال {current_field}.\n{field_prompts[current_field]}")
-    else:
-        update.message.reply_text("❗ لا توجد جلسة حالية. أرسل /start للبدء.")
-
-# === Any message handler to start session ===
+# === Text Handler ===
 def handle_text(update, context):
     user_id = update.message.from_user.id
     if user_id not in user_state:
         user_state[user_id] = {"step": 0, "data": {}}
-        update.message.reply_text("✅ تم البدء. " + field_prompts[expected_fields[0]])
+        field = expected_fields[0]
+        update.message.reply_text(welcome_message + "\n" + field_prompts[field])
+
+# === Commands ===
+def startover(update, context):
+    user_id = update.message.from_user.id
+    user_state[user_id] = {"step": 0, "data": {}}
+    field = expected_fields[0]
+    update.message.reply_text("🔄 تم إعادة البدء.\n" + field_prompts[field])
+
+def repeat(update, context):
+    user_id = update.message.from_user.id
+    if user_id in user_state:
+        step = user_state[user_id]["step"]
+        field = expected_fields[step]
+        update.message.reply_text("↩️ يرجى إعادة إرسال الخطوة الحالية:\n" + field_prompts[field])
     else:
-        update.message.reply_text("🎙️ الرجاء متابعة إرسال الملاحظات الصوتية المطلوبة.")
+        update.message.reply_text("ℹ️ لم تبدأ بعد. أرسل رسالة للبدء.")
 
-# === Handlers ===
-dispatcher.add_handler(CommandHandler("start", start))
-dispatcher.add_handler(CommandHandler("startover", startover))
-dispatcher.add_handler(CommandHandler("repeat", repeat_step))
-dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
+# === Dispatcher setup ===
 dispatcher.add_handler(MessageHandler(Filters.voice, handle_voice))
+dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
+dispatcher.add_handler(CommandHandler("startover", startover))
+dispatcher.add_handler(CommandHandler("repeat", repeat))
 
-# === Webhook ===
 @app.route(f"/{TELEGRAM_TOKEN}", methods=["POST"])
 def webhook():
     update = telegram.Update.de_json(request.get_json(force=True), bot)
