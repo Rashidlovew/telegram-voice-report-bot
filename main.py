@@ -37,7 +37,11 @@ field_prompts = {
     "TechincalOpinion": "🎙️ أرسل الرأي الفني."
 }
 
-investigator_names = ["المقدم محمد علي القاسم", "النقيب عبدالله راشد ال علي","النقيب سليمان محمد الزرعوني", "الملازم أول أحمد خالد الشامسي", "العريف راشد محمد بن حسين" ,"المدني محمد ماهر العلي", "المدني امنه خالد المازمي", "المدني حمده ماجد ال علي", "المدني عمر محسن الزقري" ]
+investigator_names = [
+    "المقدم محمد علي القاسم", "النقيب عبدالله راشد ال علي","النقيب سليمان محمد الزرعوني",
+    "الملازم أول أحمد خالد الشامسي", "العريف راشد محمد بن حسين", "المدني محمد ماهر العلي",
+    "المدني امنه خالد المازمي", "المدني حمده ماجد ال علي", "المدني عمر محسن الزقري"
+]
 
 # === Transcribe voice to text ===
 def transcribe(file_path):
@@ -49,7 +53,7 @@ def transcribe(file_path):
 
 # === Enhance input with GPT ===
 def enhance_with_gpt(field_name, user_input):
-    prompt = f"أعد صياغة {field_name} التالية مع استخدام أسلوب مهني وعربي فصيح دون ادراج اي نوع من المشاعر و ان يتم صياغة التاريخ بصيغة مماثلة للتالي 20/مايو/2025 و شكرا:\n\n{user_input}"
+    prompt = f"أعد صياغة {field_name} التالية مع استخدام أسلوب مهني وعربي فصيح دون ادراج أي نوع من المشاعر وأن يتم صياغة التاريخ بصيغة مماثلة للتالي 20/مايو/2025:\n\n{user_input}"
     response = client.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}]
@@ -90,6 +94,7 @@ def start(update, context):
         "📌 أرسل ملاحظة صوتية عند كل طلب.\n"
         "🔄 لإعادة البدء من جديد أرسل /startover\n"
         "↩️ لإعادة إدخال الخطوة الحالية أرسل /repeat\n"
+        "⏪ للرجوع إلى الخطوة السابقة أرسل /stepBack\n"
         "\n👇 اختر اسم الفاحص:",
         reply_markup=reply_markup
     )
@@ -98,12 +103,15 @@ def handle_text(update, context):
     user_id = update.message.from_user.id
     text = update.message.text.strip()
 
-    if user_id in user_state and user_state[user_id]["step"] == 0:
+    if user_id not in user_state:
+        start(update, context)
+        return
+
+    if user_state[user_id]["step"] == 0:
         if text in investigator_names:
             user_state[user_id]["data"]["Investigator"] = text
             user_state[user_id]["step"] = 1
-            next_field = expected_fields[0]
-            update.message.reply_text(f"✅ تم تسجيل اسم الفاحص.\n{field_prompts[next_field]}")
+            update.message.reply_text(f"✅ تم تسجيل اسم الفاحص.\n{field_prompts[expected_fields[0]]}")
         else:
             update.message.reply_text("❗ يرجى اختيار اسم الفاحص من الخيارات.")
 
@@ -114,14 +122,14 @@ def handle_voice(update, context):
         start(update, context)
         return
 
-    file = update.message.voice.get_file()
-    file.download("voice.ogg")
-    text = transcribe("voice.ogg")
-
     step = user_state[user_id]["step"]
     if step == 0:
         update.message.reply_text("❗ يرجى اختيار اسم الفاحص من القائمة أولاً.")
         return
+
+    file = update.message.voice.get_file()
+    file.download("voice.ogg")
+    text = transcribe("voice.ogg")
 
     field = expected_fields[step - 1]
     enhanced = enhance_with_gpt(field, text)
@@ -154,10 +162,20 @@ def repeat(update, context):
     else:
         update.message.reply_text("❗ لم تبدأ بعد. أرسل /start للبدء.")
 
+def step_back(update, context):
+    user_id = update.message.from_user.id
+    if user_id in user_state and user_state[user_id]["step"] > 1:
+        user_state[user_id]["step"] -= 1
+        field = expected_fields[user_state[user_id]["step"] - 1]
+        update.message.reply_text(f"⏪ تم الرجوع خطوة للخلف.\n↩️ أعد إرسال {field}:\n{field_prompts[field]}")
+    else:
+        update.message.reply_text("❗ لا يمكن الرجوع للخطوة السابقة حالياً.")
+
 # === Telegram setup ===
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CommandHandler("startover", startover))
 dispatcher.add_handler(CommandHandler("repeat", repeat))
+dispatcher.add_handler(CommandHandler("stepBack", step_back))
 dispatcher.add_handler(MessageHandler(Filters.voice, handle_voice))
 dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
 
