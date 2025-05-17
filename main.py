@@ -4,14 +4,14 @@ from telegram import ReplyKeyboardMarkup
 from telegram.ext import Dispatcher, MessageHandler, CommandHandler, Filters
 from flask import Flask, request
 from docxtpl import DocxTemplate
-from docx import Document
 from docx.shared import Pt
-from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.oxml.ns import qn
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from pydub import AudioSegment
 from email.message import EmailMessage
 import smtplib
 from openai import OpenAI
+from docx import Document
 
 # === Config ===
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
@@ -42,12 +42,11 @@ field_prompts = {
 }
 investigator_names = [
     "المقدم محمد علي القاسم", "النقيب عبدالله راشد ال علي", "النقيب سليمان محمد الزرعوني",
-    "الملازم أول أحمد خالد الشامسي", "العريف راشد محمد بن حسين",
-    "المدني محمد ماهر العلي", "المدني امنه خالد المازمي",
-    "المدني حمده ماجد ال علي", "المدني عمر محسن الزقري"
+    "الملازم أول أحمد خالد الشامسي", "العريف راشد محمد بن حسين", "المدني محمد ماهر العلي",
+    "المدني امنه خالد المازمي", "المدني حمده ماجد ال علي", "المدني عمر محسن الزقري"
 ]
 
-# === Transcribe ===
+# === Transcribe voice to text ===
 def transcribe(file_path):
     audio = AudioSegment.from_file(file_path)
     audio.export("converted.wav", format="wav")
@@ -55,12 +54,11 @@ def transcribe(file_path):
         result = client.audio.transcriptions.create(model="whisper-1", file=f, language="ar")
     return result.text
 
-# === Enhance with GPT ===
+# === Enhance input with GPT ===
 def enhance_with_gpt(field_name, user_input):
     prompt = (
-        f"الرجاء إعادة صياغة المعلومة التالية بشكل مهني وباللغة العربية الفصحى،"
-        f" وتجنب العواطف. كما يجب كتابة التاريخ بصيغة مثل: 20/مايو/2025.\n\n"
-        f"المعلومة: {field_name}:\n{user_input}"
+        f"يرجى إعادة صياغة التالي ({field_name}) باستخدام أسلوب مهني وعربي فصيح، "
+        f"مع تجنب المشاعر، وصياغة التاريخ بالشكل التالي: 20/مايو/2025:\n\n{user_input}"
     )
     response = client.chat.completions.create(
         model="gpt-4",
@@ -68,41 +66,39 @@ def enhance_with_gpt(field_name, user_input):
     )
     return response.choices[0].message.content.strip()
 
-# === Report Generation ===
+# === Format and generate report ===
+def format_report_doc(path):
+    doc = Document(path)
+    for paragraph in doc.paragraphs:
+        paragraph.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
+        paragraph._element.set(qn("w:rtl"), "1")
+        for run in paragraph.runs:
+            run.font.name = "Dubai"
+            run._element.rPr.rFonts.set(qn("w:eastAsia"), "Dubai")
+            run.font.size = Pt(13)
+    doc.save(path)
+
 def generate_report(data):
+    filename = f"تقرير_التحقيق_{data['Investigator'].replace(' ', '_')}.docx"
     doc = DocxTemplate("police_report_template.docx")
     doc.render(data)
-    filename = f"تقرير_التحقيق_{data['Investigator']}.docx"
     doc.save(filename)
-
-    # Format: font & alignment
-    docx = Document(filename)
-    style = docx.styles['Normal']
-    style.font.name = 'Dubai'
-    style.font.size = Pt(13)
-
-    for p in docx.paragraphs:
-        p.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
-        for run in p.runs:
-            run.font.name = 'Dubai'
-            run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Dubai')
-            run.font.size = Pt(13)
-
-    docx.save(filename)
+    format_report_doc(filename)
     return filename
 
-def send_email(filename):
+# === Email report ===
+def send_email(file_path):
     msg = EmailMessage()
     msg["Subject"] = "تقرير تحقيق تلقائي"
     msg["From"] = EMAIL_SENDER
     msg["To"] = EMAIL_RECEIVER
     msg.set_content("📎 يرجى مراجعة التقرير المرفق.")
-    with open(filename, "rb") as f:
+    with open(file_path, "rb") as f:
         msg.add_attachment(
             f.read(),
             maintype="application",
             subtype="vnd.openxmlformats-officedocument.wordprocessingml.document",
-            filename=filename
+            filename=os.path.basename(file_path)
         )
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
         smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
@@ -119,42 +115,42 @@ def start(update, context):
         "📌 أرسل ملاحظة صوتية عند كل طلب.\n"
         "🔄 لإعادة البدء من جديد أرسل /startover\n"
         "↩️ لإعادة إدخال الخطوة الحالية أرسل /repeat\n"
-        "🔙 للرجوع إلى الخطوة السابقة أرسل /stepBack\n\n"
-        "👇 اختر اسم الفاحص:",
+        "⬅️ للرجوع إلى الخطوة السابقة أرسل /stepBack\n"
+        "\n👇 اختر اسم الفاحص:",
         reply_markup=reply_markup
     )
 
 def handle_text(update, context):
     user_id = update.message.from_user.id
-    text = update.message.text.strip()
-
     if user_id not in user_state:
         start(update, context)
         return
 
+    text = update.message.text.strip()
     if user_state[user_id]["step"] == 0:
         if text in investigator_names:
             user_state[user_id]["data"]["Investigator"] = text
             user_state[user_id]["step"] = 1
-            update.message.reply_text(f"✅ تم تسجيل اسم الفاحص.\n{field_prompts[expected_fields[0]]}")
+            next_field = expected_fields[0]
+            update.message.reply_text(f"✅ تم تسجيل اسم الفاحص.\n{field_prompts[next_field]}")
         else:
-            update.message.reply_text("❗ يرجى اختيار اسم الفاحص من القائمة.")
+            update.message.reply_text("❗ يرجى اختيار اسم الفاحص من الخيارات.")
 
 def handle_voice(update, context):
     user_id = update.message.from_user.id
-
     if user_id not in user_state:
         start(update, context)
-        return
-
-    step = user_state[user_id]["step"]
-    if step == 0:
-        update.message.reply_text("❗ يرجى اختيار اسم الفاحص أولاً.")
         return
 
     file = update.message.voice.get_file()
     file.download("voice.ogg")
     text = transcribe("voice.ogg")
+
+    step = user_state[user_id]["step"]
+    if step == 0:
+        update.message.reply_text("❗ يرجى اختيار اسم الفاحص من القائمة أولاً.")
+        return
+
     field = expected_fields[step - 1]
     enhanced = enhance_with_gpt(field, text)
     user_state[user_id]["data"][field] = enhanced
@@ -164,9 +160,9 @@ def handle_voice(update, context):
         next_field = expected_fields[step]
         update.message.reply_text(f"✅ تم تسجيل {field}.\n{field_prompts[next_field]}")
     else:
-        filename = generate_report(user_state[user_id]["data"])
-        send_email(filename)
-        update.message.reply_text("📄 تم إنشاء التقرير وإرساله إلى بريدك الإلكتروني.")
+        file_path = generate_report(user_state[user_id]["data"])
+        send_email(file_path)
+        update.message.reply_text("📄 تم إنشاء التقرير وإرساله إلى البريد الإلكتروني.")
         del user_state[user_id]
 
 def startover(update, context):
@@ -178,9 +174,11 @@ def repeat(update, context):
         step = user_state[user_id]["step"]
         if step == 0:
             update.message.reply_text("↩️ يرجى اختيار اسم الفاحص.")
-        else:
+        elif step <= len(expected_fields):
             field = expected_fields[step - 1]
             update.message.reply_text(f"↩️ أعد إرسال {field}:\n{field_prompts[field]}")
+        else:
+            update.message.reply_text("❗ لا توجد خطوة حالية لإعادتها.")
     else:
         update.message.reply_text("❗ لم تبدأ بعد. أرسل /start للبدء.")
 
@@ -190,13 +188,13 @@ def step_back(update, context):
         if user_state[user_id]["step"] > 1:
             user_state[user_id]["step"] -= 1
             field = expected_fields[user_state[user_id]["step"] - 1]
-            update.message.reply_text(f"🔙 عدت إلى الخطوة السابقة.\n{field_prompts[field]}")
+            update.message.reply_text(f"⬅️ عدنا إلى {field}.\n{field_prompts[field]}")
         else:
-            update.message.reply_text("🔙 لا يمكن الرجوع قبل اختيار اسم الفاحص.")
+            update.message.reply_text("❗ لا يمكن الرجوع أكثر من ذلك.")
     else:
         update.message.reply_text("❗ لم تبدأ بعد. أرسل /start للبدء.")
 
-# === Telegram Setup ===
+# === Telegram setup ===
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CommandHandler("startover", startover))
 dispatcher.add_handler(CommandHandler("repeat", repeat))
