@@ -49,7 +49,7 @@ def transcribe(file_path):
 
 # === Enhance input with GPT ===
 def enhance_with_gpt(field_name, user_input):
-    prompt = f"أعد صياغة {field_name} التالية بطريقة احترافية، مع استخدام أسلوب مهني وعربي فصيح:\n\n{user_input}"
+    prompt = f"أعد صياغة {field_name} التالية مع استخدام أسلوب مهني وعربي فصيح دون ادراج اي نوع من المشاعر و ان يتم صياغة التاريخ بصيغة مماثلة للتالي 20/مايو/2025 و شكرا:\n\n{user_input}"
     response = client.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}]
@@ -86,11 +86,11 @@ def start(update, context):
     keyboard = [[name] for name in investigator_names]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
     update.message.reply_text(
-        "👋 مرحباً بك في بوت إعداد تقاريرالفحص الخاص بقسم الهندسة الجنائية.\n"
+        "👋 مرحباً بك في بوت إعداد تقارير الفحص الخاص بقسم الهندسة الجنائية.\n"
         "📌 أرسل ملاحظة صوتية عند كل طلب.\n"
         "🔄 لإعادة البدء من جديد أرسل /startover\n"
         "↩️ لإعادة إدخال الخطوة الحالية أرسل /repeat\n"
-        "\n👇 اختر اسم المحقق:",
+        "\n👇 اختر اسم الفاحص:",
         reply_markup=reply_markup
     )
 
@@ -103,9 +103,9 @@ def handle_text(update, context):
             user_state[user_id]["data"]["Investigator"] = text
             user_state[user_id]["step"] = 1
             next_field = expected_fields[0]
-            update.message.reply_text(f"✅ تم تسجيل اسم المحقق.\n{field_prompts[next_field]}")
+            update.message.reply_text(f"✅ تم تسجيل اسم الفاحص.\n{field_prompts[next_field]}")
         else:
-            update.message.reply_text("❗ يرجى اختيار اسم المحقق من الخيارات.")
+            update.message.reply_text("❗ يرجى اختيار اسم الفاحص من الخيارات.")
 
 def handle_voice(update, context):
     user_id = update.message.from_user.id
@@ -134,7 +134,7 @@ def handle_voice(update, context):
     else:
         generate_report(user_state[user_id]["data"])
         send_email()
-        update.message.reply_text("📄 تم إنشاء التقرير وإرساله إلى بريدك الإلكتروني.")
+        update.message.reply_text("📄 تم إنشاء التقرير وإرساله إلى البريد الإلكتروني.")
         del user_state[user_id]
 
 def startover(update, context):
@@ -145,7 +145,7 @@ def repeat(update, context):
     if user_id in user_state:
         step = user_state[user_id]["step"]
         if step == 0:
-            update.message.reply_text("↩️ يرجى اختيار اسم المحقق.")
+            update.message.reply_text("↩️ يرجى اختيار اسم الفاحص.")
         elif step <= len(expected_fields):
             field = expected_fields[step - 1]
             update.message.reply_text(f"↩️ أعد إرسال {field}:\n{field_prompts[field]}")
