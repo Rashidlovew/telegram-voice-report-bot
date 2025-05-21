@@ -54,7 +54,7 @@ field_prompts = {
 }
 field_names_ar = {
     "Date": "التاريخ",
-    "Briefing": "ملخص الحادث",
+    "Briefing": "موجز الواقعة",
     "LocationObservations": "معاينة الموقع",
     "Examination": "نتيجة الفحص الفني",
     "Outcomes": "النتيجة",
@@ -155,7 +155,7 @@ def handle_text(update, context):
             user_state[user_id]["data"]["Investigator"] = text
             user_state[user_id]["step"] = 1
             next_field = expected_fields[0]
-            update.message.reply_text(f"✅ تم تسجيل {field_names_ar[next_field]}.\n{field_prompts[next_field]}")
+            update.message.reply_text(f"✅ تم تسجيل اسم الفاحص.\n{field_prompts[next_field]}")
         else:
             update.message.reply_text("❗ يرجى اختيار اسم الفاحص من الخيارات.")
 
@@ -188,8 +188,8 @@ def handle_voice(update, context):
         file_path = generate_report(user_state[user_id]["data"])
         send_email(file_path, recipient_email, investigator)
         update.message.reply_text(
-            f"📄 تم إنشاء التقرير وإرساله إلى بريدك الإلكتروني .\n"
-            f"✅ شكراً لاستخدامك البوت  {investigator}."
+            f"📄 تم إنشاء التقرير وإرساله إلى بريدك الإلكتروني.\n"
+            f"✅ شكراً لاستخدامك البوت يا {investigator}."
         )
         del user_state[user_id]
 
