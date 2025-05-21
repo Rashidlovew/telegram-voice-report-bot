@@ -92,12 +92,12 @@ def generate_report(data):
     format_report_doc(filename)
     return filename
 
-def send_email(file_path, recipient):
+def send_email(file_path, recipient, investigator_name):
     msg = EmailMessage()
     msg["Subject"] = "تقرير تحقيق تلقائي"
     msg["From"] = EMAIL_SENDER
     msg["To"] = recipient
-    msg.set_content("📎 يرجى مراجعة التقرير المرفق.")
+    msg.set_content(f"📎 يرجى مراجعة التقرير المرفق.\n\nمع تحيات فريق العمل، {investigator_name}.")
     with open(file_path, "rb") as f:
         msg.add_attachment(
             f.read(),
@@ -168,8 +168,11 @@ def handle_voice(update, context):
         investigator = user_state[user_id]["data"]["Investigator"]
         recipient_email = investigator_emails.get(investigator, EMAIL_SENDER)
         file_path = generate_report(user_state[user_id]["data"])
-        send_email(file_path, recipient_email)
-        update.message.reply_text("📄 تم إنشاء التقرير وإرساله إلى البريد الإلكتروني المحدد.")
+        send_email(file_path, recipient_email, investigator)
+        update.message.reply_text(
+            f"📄 تم إنشاء التقرير وإرساله إلى البريد الإلكتروني المحدد.\n"
+            f"✅ شكراً لاستخدامك البوت يا {investigator}."
+        )
         del user_state[user_id]
 
 def startover(update, context):
