@@ -41,17 +41,24 @@ investigator_names = list(investigator_emails.keys())
 # === Bot state ===
 user_state = {}
 expected_fields = [
-    "Date", "Briefing", "Observations", "LocationObservations",
+    "Date", "Briefing", "LocationObservations",
     "Examination", "Outcomes", "TechincalOpinion"
 ]
 field_prompts = {
     "Date": "🎙️ أرسل تاريخ الواقعة.",
-    "Briefing": "🎙️ أرسل ملخص الحادث.",
-    "Observations": "🎙️ أرسل الملاحظات.",
-    "LocationObservations": "🎙️ أرسل معاينة الموقع.",
-    "Examination": "🎙️ أرسل نتيجة الفحص الفني.",
-    "Outcomes": "🎙️ أرسل النتيجة.",
+    "Briefing": "🎙️ أرسل موجز الواقعة.",
+    "LocationObservations": "🎙️ أرسل معاينة الموقع حيث بمعاينة موقع الحادث تبين ما يلي .....",
+    "Examination": "🎙️ أرسل نتيجة الفحص الفني ... حيث بفحص موضوع الحادث تبين ما يلي .....",
+    "Outcomes": "🎙️ أرسل النتيجة حيث أنه بعد المعاينة و أجراء الفحوص الفنية اللازمة تبين ما يلي:.",
     "TechincalOpinion": "🎙️ أرسل الرأي الفني."
+}
+field_names_ar = {
+    "Date": "التاريخ",
+    "Briefing": "ملخص الحادث",
+    "LocationObservations": "معاينة الموقع",
+    "Examination": "نتيجة الفحص الفني",
+    "Outcomes": "النتيجة",
+    "TechincalOpinion": "الرأي الفني"
 }
 
 # === Utilities ===
@@ -63,14 +70,9 @@ def transcribe(file_path):
     return result.text
 
 def enhance_with_gpt(field_name, user_input):
-    if field_name == "Observations":
+    if field_name == "TechincalOpinion":
         prompt = (
-            f"يرجى إعادة صياغة ({field_name}) التالية على شكل نقاط مرتبة باستخدام أسلوب مهني وعربي فصيح، "
-            f"مع تجنب العواطف أو المبالغة:\n\n{user_input}"
-        )
-    elif field_name == "TechincalOpinion":
-        prompt = (
-            f"يرجى إعادة صياغة ({field_name}) التالية بطريقة مهنية وتحليلية،  "
+            f"يرجى إعادة صياغة ({field_name}) التالية بطريقة مهنية وتحليلية، "
             f"وباستخدام لغة رسمية وعربية فصحى:\n\n{user_input}"
         )
     elif field_name == "Date":
@@ -88,7 +90,6 @@ def enhance_with_gpt(field_name, user_input):
         messages=[{"role": "user", "content": prompt}]
     )
     return response.choices[0].message.content.strip()
-
 
 def format_report_doc(path):
     doc = Document(path)
@@ -154,7 +155,7 @@ def handle_text(update, context):
             user_state[user_id]["data"]["Investigator"] = text
             user_state[user_id]["step"] = 1
             next_field = expected_fields[0]
-            update.message.reply_text(f"✅ تم تسجيل اسم الفاحص.\n{field_prompts[next_field]}")
+            update.message.reply_text(f"✅ تم تسجيل {field_names_ar[next_field]}.\n{field_prompts[next_field]}")
         else:
             update.message.reply_text("❗ يرجى اختيار اسم الفاحص من الخيارات.")
 
@@ -180,15 +181,15 @@ def handle_voice(update, context):
     if step < len(expected_fields):
         user_state[user_id]["step"] += 1
         next_field = expected_fields[step]
-        update.message.reply_text(f"✅ تم تسجيل {field}.\n{field_prompts[next_field]}")
+        update.message.reply_text(f"✅ تم تسجيل {field_names_ar[field]}.\n{field_prompts[next_field]}")
     else:
         investigator = user_state[user_id]["data"]["Investigator"]
         recipient_email = investigator_emails.get(investigator, EMAIL_SENDER)
         file_path = generate_report(user_state[user_id]["data"])
         send_email(file_path, recipient_email, investigator)
         update.message.reply_text(
-            f"📄 تم إنشاء التقرير وإرساله إلى البريد الإلكتروني المحدد.\n"
-            f"✅ شكراً لاستخدامك البوت يا {investigator}."
+            f"📄 تم إنشاء التقرير وإرساله إلى بريدك الإلكتروني .\n"
+            f"✅ شكراً لاستخدامك البوت  {investigator}."
         )
         del user_state[user_id]
 
@@ -203,7 +204,7 @@ def repeat(update, context):
             update.message.reply_text("↩️ يرجى اختيار اسم الفاحص.")
         elif step <= len(expected_fields):
             field = expected_fields[step - 1]
-            update.message.reply_text(f"↩️ أعد إرسال {field}:\n{field_prompts[field]}")
+            update.message.reply_text(f"↩️ أعد إرسال {field_names_ar[field]}:\n{field_prompts[field]}")
         else:
             update.message.reply_text("❗ لا توجد خطوة حالية لإعادتها.")
     else:
@@ -214,7 +215,7 @@ def step_back(update, context):
     if user_id in user_state and user_state[user_id]["step"] > 1:
         user_state[user_id]["step"] -= 1
         field = expected_fields[user_state[user_id]["step"] - 1]
-        update.message.reply_text(f"⬅️ عدنا إلى {field}.\n{field_prompts[field]}")
+        update.message.reply_text(f"⬅️ عدنا إلى {field_names_ar[field]}.\n{field_prompts[field]}")
     else:
         update.message.reply_text("❗ لا يمكن الرجوع أكثر من ذلك.")
 
@@ -243,3 +244,4 @@ def set_webhook():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
+
