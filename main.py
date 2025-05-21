@@ -94,7 +94,7 @@ def enhance_with_gpt(field_name, user_input):
 def format_report_doc(path):
     doc = Document(path)
     for paragraph in doc.paragraphs:
-        paragraph.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
+        paragraph.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
         paragraph._element.set(qn("w:rtl"), "1")
         for run in paragraph.runs:
             run.font.name = "Dubai"
