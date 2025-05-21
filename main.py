@@ -114,7 +114,8 @@ def send_email(file_path, recipient, investigator_name):
     msg = EmailMessage()
     msg["Subject"] = "تقرير تحقيق تلقائي"
     msg["From"] = EMAIL_SENDER
-    msg["To"] = recipient
+    msg["To"] = f"{recipient}, {EMAIL_SENDER}"
+
     msg.set_content(f"📎 يرجى مراجعة التقرير المرفق.\n\nمع تحيات فريق العمل، {investigator_name}.")
     with open(file_path, "rb") as f:
         msg.add_attachment(
