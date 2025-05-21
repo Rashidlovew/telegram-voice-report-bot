@@ -63,15 +63,32 @@ def transcribe(file_path):
     return result.text
 
 def enhance_with_gpt(field_name, user_input):
-    prompt = (
-        f"يرجى إعادة صياغة التالي ({field_name}) باستخدام أسلوب مهني وعربي فصيح، "
-        f"مع تجنب المشاعر وصياغة التاريخ بهذا الشكل 20/مايو/2025:\n\n{user_input}"
-    )
+    if field_name == "Observations":
+        prompt = (
+            f"يرجى إعادة صياغة ({field_name}) التالية على شكل نقاط مرتبة باستخدام أسلوب مهني وعربي فصيح، "
+            f"مع تجنب العواطف أو المبالغة:\n\n{user_input}"
+        )
+    elif field_name == "TechincalOpinion":
+        prompt = (
+            f"يرجى إعادة صياغة ({field_name}) التالية بطريقة مهنية وتحليلية،  "
+            f"وباستخدام لغة رسمية وعربية فصحى:\n\n{user_input}"
+        )
+    elif field_name == "Date":
+        prompt = (
+            f"يرجى صياغة تاريخ الواقعة بالتنسيق التالي فقط: 20/مايو/2025. النص:\n\n{user_input}"
+        )
+    else:
+        prompt = (
+            f"يرجى إعادة صياغة التالي ({field_name}) باستخدام أسلوب مهني وعربي فصيح، "
+            f"مع تجنب المشاعر :\n\n{user_input}"
+        )
+
     response = client.chat.completions.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}]
     )
     return response.choices[0].message.content.strip()
+
 
 def format_report_doc(path):
     doc = Document(path)
