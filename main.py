@@ -94,8 +94,8 @@ def enhance_with_gpt(field_name, user_input):
 def format_report_doc(path):
     doc = Document(path)
     for paragraph in doc.paragraphs:
-        paragraph.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
-        paragraph._element.set(qn("w:rtl"), "1")
+       # paragraph.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
+       # paragraph._element.set(qn("w:rtl"), "1")
         for run in paragraph.runs:
             run.font.name = "Dubai"
             run._element.rPr.rFonts.set(qn("w:eastAsia"), "Dubai")
@@ -188,7 +188,7 @@ def handle_voice(update, context):
         file_path = generate_report(user_state[user_id]["data"])
         send_email(file_path, recipient_email, investigator)
         update.message.reply_text(
-            f"📄 تم إنشاء التقرير وإرساله إلى بريدك الإلكتروني.\n"
+            f"📄 تم إنشاء التقرير و إرساله إلى بريدك الإلكتروني.\n"
             f"✅ شكراً لاستخدامك البوت  {investigator}."
         )
         del user_state[user_id]
