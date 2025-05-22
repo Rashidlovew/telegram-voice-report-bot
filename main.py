@@ -26,15 +26,15 @@ dispatcher = Dispatcher(bot, update_queue=None, workers=0, use_context=True)
 
 # === Investigator options with their emails ===
 investigator_emails = {
-    "المقدم محمد علي القاسم": "mohammed@example.com",
-    "النقيب عبدالله راشد ال علي": "abdullah@example.com",
-    "النقيب سليمان محمد الزرعوني": "sulaiman@example.com",
-    "الملازم أول أحمد خالد الشامسي": "ahmed@example.com",
-    "العريف راشد محمد بن حسين": "rashed@example.com",
-    "المدني محمد ماهر العلي": "maher@example.com",
-    "المدني امنه خالد المازمي": "amna@example.com",
-    "المدني حمده ماجد ال علي": "hamda@example.com",
-    "المدني عمر محسن الزقري": "omar@example.com"
+    "المقدم محمد علي القاسم": "mam.qasim@dubaipolice.gov.ae",
+    "النقيب عبدالله راشد ال علي": "AR.ALI@dubaipolice.gov.ae",
+    "النقيب سليمان محمد الزرعوني": "SMS.ALZAROONI@dubaipolice.gov.ae",
+    "الملازم أول أحمد خالد الشامسي": "A.KHALSHAMSI@dubaipolice.gov.ae",
+    "العريف راشد محمد بن حسين": "r.ashussain@dubaipolice.gov.ae",
+    "المدني محمد ماهر العلي": "M.OHAMMALALI@dubaipolice.gov.ae",
+    "المدني امنه خالد المازمي": "A.KHALMAAZMI@dubaipolice.gov.ae",
+    "المدني حمده ماجد ال علي": "H.m.ALALI@dubaipolice.gov.ae",
+    "المدني عمر محسن الزقري": "O.MOALZEQRI@dubaipolice.gov.ae"
 }
 investigator_names = list(investigator_emails.keys())
 
