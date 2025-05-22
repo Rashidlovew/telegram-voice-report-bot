@@ -112,7 +112,7 @@ def generate_report(data):
 
 def send_email(file_path, recipient, investigator_name):
     msg = EmailMessage()
-    msg["Subject"] = "تقرير تحقيق تلقائي"
+    msg["Subject"] = "تقرير فحص تلقائي"
     msg["From"] = EMAIL_SENDER
     msg["To"] = f"{recipient}, {EMAIL_SENDER}"
 
